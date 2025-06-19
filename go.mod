@@ -1,4 +1,4 @@
-module packetizer
+module github.com/go-mc/packetizer
 
 go 1.24
 
