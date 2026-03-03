@@ -18,7 +18,6 @@ import (
 
 	"github.com/iancoleman/strcase"
 
-	"git.konjactw.dev/falloutBot/go-mc/net/packet"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -306,8 +305,8 @@ func (p packageData) analyzeFile() (pkgInfo PackageInfo) {
 		}
 	}
 
-	if !slices.Contains(pkgInfo.Imports, "git.konjactw.dev/falloutBot/go-mc/net/packet") {
-		pkgInfo.Imports = append(pkgInfo.Imports, "git.konjactw.dev/falloutBot/go-mc/net/packet")
+	if !slices.Contains(pkgInfo.Imports, "github.com/KonjacBot/go-mc/net/packet") {
+		pkgInfo.Imports = append(pkgInfo.Imports, "github.com/KonjacBot/go-mc/net/packet")
 	}
 
 	if !slices.Contains(pkgInfo.Imports, "io") {
@@ -399,7 +398,6 @@ var codecTemplate string
 var tmpl *template.Template
 
 func init() {
-	_ = packet.Field(nil)
 
 	funcMap := template.FuncMap{}
 
@@ -409,6 +407,7 @@ func init() {
 func main() {
 	dir := flag.String("dir", ".", "input directory to search for codec:gen tags")
 	noFormat := flag.Bool("noFormat", false, "don't run goimports and go fmt on the generated file")
+	pkgPath := flag.String("pkg", "github.com/KonjacBot/go-mc", "go-mc pkg dir")
 	flag.Parse()
 
 	cfg := &packages.Config{
@@ -418,13 +417,13 @@ func main() {
 		Env:  os.Environ(),
 	}
 
-	pkgs, err := packages.Load(cfg, "git.konjactw.dev/falloutBot/go-mc/net/packet", "./...")
+	pkgs, err := packages.Load(cfg, *pkgPath+"/net/packet", "./...")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to load packet package: %v\n", err)
 		os.Exit(1)
 	}
 	for _, pkg := range pkgs {
-		if pkg.PkgPath == "git.konjactw.dev/falloutBot/go-mc/net/packet" {
+		if pkg.PkgPath == *pkgPath+"/net/packet" {
 			scope := pkg.Types.Scope()
 			for _, name := range scope.Names() {
 				packetFieldMap[name] = scope.Lookup(name).Type()
@@ -435,7 +434,7 @@ func main() {
 
 	grouped := make(map[string]*PackageInfo)
 	for _, pkg := range pkgs {
-		if pkg.PkgPath == "git.konjactw.dev/falloutBot/go-mc/net/packet" {
+		if pkg.PkgPath == *pkgPath+"/net/packet" {
 			continue
 		}
 		for _, file := range pkg.Syntax {
