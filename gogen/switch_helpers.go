@@ -11,6 +11,13 @@ import (
 	"github.com/KonjacBot/packetizer/schemair"
 )
 
+func writeRawLine(out *bytes.Buffer, indent string, code string) error {
+	return executeTemplate(out, "rawLine", templateData{
+		"Indent": indent,
+		"Code":   code,
+	})
+}
+
 func sanitizeValueName(name string) string {
 	if n, err := strconv.Atoi(name); err == nil {
 		return "Value" + strconv.Itoa(n)
@@ -39,10 +46,16 @@ func (g *Generator) writeSwitchSize(out *bytes.Buffer, container *schemair.Conta
 		return err
 	}
 	if _, ok := fieldExpr.(*schemair.Option); ok {
-		writeFormat(out, "%sif %s != nil {\n", indent, compareExpr)
-		writeFormat(out, "%s\tswitch *%s {\n", indent, compareExpr)
+		if err := writeRawLine(out, indent, "if "+compareExpr+" != nil {"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent+"\t", "switch *"+compareExpr+" {"); err != nil {
+			return err
+		}
 	} else {
-		writeFormat(out, "%sswitch %s {\n", indent, compareExpr)
+		if err := writeRawLine(out, indent, "switch "+compareExpr+" {"); err != nil {
+			return err
+		}
 	}
 	seenLabels := map[string]struct{}{}
 	for i, kase := range expr.Cases {
@@ -51,23 +64,35 @@ func (g *Generator) writeSwitchSize(out *bytes.Buffer, container *schemair.Conta
 		}
 	}
 	if _, ok := fieldExpr.(*schemair.Option); ok {
-		writeFormat(out, "%s\tdefault:\n", indent)
+		if err := writeRawLine(out, indent+"\t", "default:"); err != nil {
+			return err
+		}
 		if err := g.writeSwitchDefaultSize(out, container, parentContainer, expr, value, indent+"\t\t", ctx, owner, parentOwner, rootContainer, rootOwner); err != nil {
 			return err
 		}
-		writeFormat(out, "%s\t}\n", indent)
-		writeFormat(out, "%s} else {\n", indent)
+		if err := writeRawLine(out, indent+"\t", "}"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "} else {"); err != nil {
+			return err
+		}
 		if err := g.writeSwitchDefaultSize(out, container, parentContainer, expr, value, indent+"\t", ctx, owner, parentOwner, rootContainer, rootOwner); err != nil {
 			return err
 		}
-		writeFormat(out, "%s}\n", indent)
+		if err := writeRawLine(out, indent, "}"); err != nil {
+			return err
+		}
 		return nil
 	}
-	writeFormat(out, "%sdefault:\n", indent)
+	if err := writeRawLine(out, indent, "default:"); err != nil {
+		return err
+	}
 	if err := g.writeSwitchDefaultSize(out, container, parentContainer, expr, value, indent+"\t", ctx, owner, parentOwner, rootContainer, rootOwner); err != nil {
 		return err
 	}
-	writeFormat(out, "%s}\n", indent)
+	if err := writeRawLine(out, indent, "}"); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -78,10 +103,16 @@ func (g *Generator) writeSwitchAppend(out *bytes.Buffer, container *schemair.Con
 		return err
 	}
 	if _, ok := fieldExpr.(*schemair.Option); ok {
-		writeFormat(out, "%sif %s != nil {\n", indent, compareExpr)
-		writeFormat(out, "%s\tswitch *%s {\n", indent, compareExpr)
+		if err := writeRawLine(out, indent, "if "+compareExpr+" != nil {"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent+"\t", "switch *"+compareExpr+" {"); err != nil {
+			return err
+		}
 	} else {
-		writeFormat(out, "%sswitch %s {\n", indent, compareExpr)
+		if err := writeRawLine(out, indent, "switch "+compareExpr+" {"); err != nil {
+			return err
+		}
 	}
 	seenLabels := map[string]struct{}{}
 	for i, kase := range expr.Cases {
@@ -90,23 +121,35 @@ func (g *Generator) writeSwitchAppend(out *bytes.Buffer, container *schemair.Con
 		}
 	}
 	if _, ok := fieldExpr.(*schemair.Option); ok {
-		writeFormat(out, "%s\tdefault:\n", indent)
+		if err := writeRawLine(out, indent+"\t", "default:"); err != nil {
+			return err
+		}
 		if err := g.writeSwitchDefaultAppend(out, container, parentContainer, expr, value, indent+"\t\t", ctx, owner, parentOwner, rootContainer, rootOwner); err != nil {
 			return err
 		}
-		writeFormat(out, "%s\t}\n", indent)
-		writeFormat(out, "%s} else {\n", indent)
+		if err := writeRawLine(out, indent+"\t", "}"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "} else {"); err != nil {
+			return err
+		}
 		if err := g.writeSwitchDefaultAppend(out, container, parentContainer, expr, value, indent+"\t", ctx, owner, parentOwner, rootContainer, rootOwner); err != nil {
 			return err
 		}
-		writeFormat(out, "%s}\n", indent)
+		if err := writeRawLine(out, indent, "}"); err != nil {
+			return err
+		}
 		return nil
 	}
-	writeFormat(out, "%sdefault:\n", indent)
+	if err := writeRawLine(out, indent, "default:"); err != nil {
+		return err
+	}
 	if err := g.writeSwitchDefaultAppend(out, container, parentContainer, expr, value, indent+"\t", ctx, owner, parentOwner, rootContainer, rootOwner); err != nil {
 		return err
 	}
-	writeFormat(out, "%s}\n", indent)
+	if err := writeRawLine(out, indent, "}"); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -117,10 +160,16 @@ func (g *Generator) writeSwitchDecode(out *bytes.Buffer, container *schemair.Con
 		return err
 	}
 	if _, ok := fieldExpr.(*schemair.Option); ok {
-		writeFormat(out, "%sif %s != nil {\n", indent, compareExpr)
-		writeFormat(out, "%s\tswitch *%s {\n", indent, compareExpr)
+		if err := writeRawLine(out, indent, "if "+compareExpr+" != nil {"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent+"\t", "switch *"+compareExpr+" {"); err != nil {
+			return err
+		}
 	} else {
-		writeFormat(out, "%sswitch %s {\n", indent, compareExpr)
+		if err := writeRawLine(out, indent, "switch "+compareExpr+" {"); err != nil {
+			return err
+		}
 	}
 	seenLabels := map[string]struct{}{}
 	for i, kase := range expr.Cases {
@@ -129,23 +178,35 @@ func (g *Generator) writeSwitchDecode(out *bytes.Buffer, container *schemair.Con
 		}
 	}
 	if _, ok := fieldExpr.(*schemair.Option); ok {
-		writeFormat(out, "%s\tdefault:\n", indent)
+		if err := writeRawLine(out, indent+"\t", "default:"); err != nil {
+			return err
+		}
 		if err := g.writeSwitchDefaultDecode(out, container, parentContainer, expr, value, indent+"\t\t", ctx, owner, parentOwner, rootContainer, rootOwner); err != nil {
 			return err
 		}
-		writeFormat(out, "%s\t}\n", indent)
-		writeFormat(out, "%s} else {\n", indent)
+		if err := writeRawLine(out, indent+"\t", "}"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "} else {"); err != nil {
+			return err
+		}
 		if err := g.writeSwitchDefaultDecode(out, container, parentContainer, expr, value, indent+"\t", ctx, owner, parentOwner, rootContainer, rootOwner); err != nil {
 			return err
 		}
-		writeFormat(out, "%s}\n", indent)
+		if err := writeRawLine(out, indent, "}"); err != nil {
+			return err
+		}
 		return nil
 	}
-	writeFormat(out, "%sdefault:\n", indent)
+	if err := writeRawLine(out, indent, "default:"); err != nil {
+		return err
+	}
 	if err := g.writeSwitchDefaultDecode(out, container, parentContainer, expr, value, indent+"\t", ctx, owner, parentOwner, rootContainer, rootOwner); err != nil {
 		return err
 	}
-	writeFormat(out, "%s}\n", indent)
+	if err := writeRawLine(out, indent, "}"); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -158,7 +219,9 @@ func (g *Generator) writeSwitchCaseSize(out *bytes.Buffer, container *schemair.C
 	if len(labels) == 0 {
 		return nil
 	}
-	writeFormat(out, "%scase %s:\n", indent, strings.Join(labels, ", "))
+	if err := writeRawLine(out, indent, "case "+strings.Join(labels, ", ")+":"); err != nil {
+		return err
+	}
 	return g.writeSwitchCaseBodySize(out, container, parentContainer, kase.Expr, value, indent+"\t", ctx, owner, parentOwner, rootContainer, rootOwner, kase, i)
 }
 
@@ -171,7 +234,9 @@ func (g *Generator) writeSwitchCaseAppend(out *bytes.Buffer, container *schemair
 	if len(labels) == 0 {
 		return nil
 	}
-	writeFormat(out, "%scase %s:\n", indent, strings.Join(labels, ", "))
+	if err := writeRawLine(out, indent, "case "+strings.Join(labels, ", ")+":"); err != nil {
+		return err
+	}
 	return g.writeSwitchCaseBodyAppend(out, container, parentContainer, kase.Expr, value, indent+"\t", ctx, owner, parentOwner, rootContainer, rootOwner, kase, i)
 }
 
@@ -184,7 +249,9 @@ func (g *Generator) writeSwitchCaseDecode(out *bytes.Buffer, container *schemair
 	if len(labels) == 0 {
 		return nil
 	}
-	writeFormat(out, "%scase %s:\n", indent, strings.Join(labels, ", "))
+	if err := writeRawLine(out, indent, "case "+strings.Join(labels, ", ")+":"); err != nil {
+		return err
+	}
 	return g.writeSwitchCaseBodyDecode(out, container, parentContainer, kase.Expr, value, indent+"\t", ctx, owner, parentOwner, rootContainer, rootOwner, kase, i)
 }
 
@@ -211,8 +278,12 @@ func (g *Generator) writeSwitchCaseBodySize(out *bytes.Buffer, container *schema
 		return err
 	}
 	temp := strcase.ToLowerCamel(ctx) + "CaseValue"
-	writeFormat(out, "%s%s, ok := %s.(%s)\n", indent, temp, value, typeName)
-	writeFormat(out, "%sif !ok { return 0, fmt.Errorf(\"field %%s expected %s in switch case\", %q) }\n", indent, typeName, value)
+	if err := writeRawLine(out, indent, temp+", ok := "+value+".("+typeName+")"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, indent, `if !ok { return 0, fmt.Errorf("field %s expected `+typeName+` in switch case", `+strconv.Quote(value)+`) }`); err != nil {
+		return err
+	}
 	return g.writeSizeExpr(out, container, parentContainer, expr, temp, indent, caseName, owner, parentOwner, rootContainer, rootOwner)
 }
 
@@ -227,14 +298,20 @@ func (g *Generator) writeSwitchCaseBodyAppend(out *bytes.Buffer, container *sche
 		return err
 	}
 	temp := strcase.ToLowerCamel(ctx) + "CaseValue"
-	writeFormat(out, "%s%s, ok := %s.(%s)\n", indent, temp, value, typeName)
-	writeFormat(out, "%sif !ok { return nil, fmt.Errorf(\"field %%s expected %s in switch case\", %q) }\n", indent, typeName, value)
+	if err := writeRawLine(out, indent, temp+", ok := "+value+".("+typeName+")"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, indent, `if !ok { return nil, fmt.Errorf("field %s expected `+typeName+` in switch case", `+strconv.Quote(value)+`) }`); err != nil {
+		return err
+	}
 	return g.writeAppendExpr(out, container, parentContainer, expr, temp, indent, caseName, owner, parentOwner, rootContainer, rootOwner)
 }
 
 func (g *Generator) writeSwitchCaseBodyDecode(out *bytes.Buffer, container *schemair.Container, parentContainer *schemair.Container, expr schemair.Expr, value string, indent string, ctx string, owner string, parentOwner string, rootContainer *schemair.Container, rootOwner string, kase schemair.SwitchCase, i int) error {
 	if _, ok := expr.(*schemair.Void); ok {
-		writeFormat(out, "%s%s = nil\n", indent, value)
+		if err := writeRawLine(out, indent, value+" = nil"); err != nil {
+			return err
+		}
 		return nil
 	}
 	caseName := switchCaseName(ctx, kase, i)
@@ -243,11 +320,15 @@ func (g *Generator) writeSwitchCaseBodyDecode(out *bytes.Buffer, container *sche
 		return err
 	}
 	temp := strcase.ToLowerCamel(ctx) + "CaseValue"
-	writeFormat(out, "%svar %s %s\n", indent, temp, typeName)
+	if err := writeRawLine(out, indent, "var "+temp+" "+typeName); err != nil {
+		return err
+	}
 	if err := g.writeDecodeExpr(out, container, parentContainer, expr, temp, indent, caseName, owner, parentOwner, rootContainer, rootOwner); err != nil {
 		return err
 	}
-	writeFormat(out, "%s%s = %s\n", indent, value, temp)
+	if err := writeRawLine(out, indent, value+" = "+temp); err != nil {
+		return err
+	}
 	return nil
 }
 

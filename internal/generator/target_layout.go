@@ -138,7 +138,7 @@ func emitGoLayoutPackages(ir *schemair.File, prepared *gogen.Prepared, target Ta
 				LabelOverrides: labelOverrides,
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("emit %s: %w", filepath.Join(dir, file.Name), err)
 			}
 			if err := os.WriteFile(filepath.Join(dir, file.Name), content, 0644); err != nil {
 				return err

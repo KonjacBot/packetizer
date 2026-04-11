@@ -17,6 +17,8 @@ import (
 	"github.com/KonjacBot/packetizer/schemair"
 )
 
+const wireImportPath = "github.com/KonjacBot/packetizer/wire"
+
 type Options struct {
 	PackageName    string
 	Types          []string
@@ -136,7 +138,7 @@ func Emit(prepared *Prepared, opts EmitOptions) ([]byte, error) {
 		types:          prepared.Types,
 		local:          local,
 		natives:        prepared.Natives,
-		imports:        []importSpec{{Path: "github.com/go-mc/packetizer/wire"}},
+		imports:        []importSpec{{Path: wireImportPath}},
 		externalRefs:   opts.ExternalRefs,
 		labelOverrides: opts.LabelOverrides,
 		original:       prepared.Original,
@@ -468,7 +470,9 @@ func (g *Generator) emitStructFields(out *bytes.Buffer, name string, fields []sc
 		if err != nil {
 			return err
 		}
-		writeFormat(out, "\t%s %s\n", field.Name, fieldType)
+		if err := writeRawLine(out, "\t", field.Name+" "+fieldType); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -553,44 +557,138 @@ func (g *Generator) emitAlias(out *bytes.Buffer, name string, expr schemair.Expr
 	}
 
 	body.Reset()
-	writeFormat(&body, "\tvar value %s\n", goType)
+	if err := writeRawLine(&body, "\t", "var value "+goType); err != nil {
+		return err
+	}
 	if err := g.writeDecodeExpr(&body, nil, nil, expr, "value", "\t", name, "c", "", nil, "c"); err != nil {
 		return err
 	}
-	writeFormat(&body, "\t*c = %s(value)\n", name)
+	if err := writeRawLine(&body, "\t", "*c = "+name+"(value)"); err != nil {
+		return err
+	}
 	return executeTemplate(out, "decodeFunc", templateData{"Name": name, "Body": body.String()})
 }
 
 func (g *Generator) emitBitfield(out *bytes.Buffer, name string, expr *schemair.Bitfield) error {
-	writeFormat(out, "type %s struct {\n", name)
-	for _, field := range expr.Fields {
-		writeFormat(out, "\t%s %s\n", field.Name, bitfieldGoType(field))
+	if err := writeRawLine(out, "", "type "+name+" struct {"); err != nil {
+		return err
 	}
-	writeFormat(out, "}\n\n")
+	for _, field := range expr.Fields {
+		if err := writeRawLine(out, "\t", field.Name+" "+bitfieldGoType(field)); err != nil {
+			return err
+		}
+	}
+	if err := writeRawLine(out, "", "}"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", ""); err != nil {
+		return err
+	}
 
 	totalBytes := bitfieldByteSize(expr)
-	writeFormat(out, "func (%s) Size() (int, error) { return %d, nil }\n\n", name, totalBytes)
-	writeFormat(out, "func (c %s) Append(dst []byte) ([]byte, error) {\n\tvar raw uint64\n", name)
+	if err := writeRawLine(out, "", "func ("+name+") Size() (int, error) { return "+strconv.Itoa(totalBytes)+", nil }"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", ""); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", "func (c "+name+") Append(dst []byte) ([]byte, error) {"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "var raw uint64"); err != nil {
+		return err
+	}
 	remaining := bitfieldTotalBits(expr)
 	for _, field := range expr.Fields {
 		remaining -= field.Size
-		writeFormat(out, "\traw |= (uint64(%s(c.%s)) & 0x%s) << %d\n", bitfieldCastType(field), field.Name, strconv.FormatUint(bitfieldMask(field.Size), 16), remaining)
+		mask := strconv.FormatUint(bitfieldMask(field.Size), 16)
+		if err := writeRawLine(out, "\t", "raw |= (uint64("+bitfieldCastType(field)+"(c."+field.Name+")) & 0x"+mask+") << "+strconv.Itoa(remaining)); err != nil {
+			return err
+		}
 	}
-	writeFormat(out, "\tfor i := %d; i >= 0; i-- {\n\t\tdst = append(dst, byte(raw>>(i*8)))\n\t}\n\treturn dst, nil\n}\n\n", totalBytes-1)
-	writeFormat(out, "func (c *%s) Decode(src []byte) ([]byte, error) {\n\tif len(src) < %d {\n\t\treturn nil, io.ErrUnexpectedEOF\n\t}\n\tvar raw uint64\n\tfor i := 0; i < %d; i++ {\n\t\traw = (raw << 8) | uint64(src[i])\n\t}\n", name, totalBytes, totalBytes)
+	if err := writeRawLine(out, "\t", "for i := "+strconv.Itoa(totalBytes-1)+"; i >= 0; i-- {"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t\t", "dst = append(dst, byte(raw>>(i*8)))"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "}"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "return dst, nil"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", "}"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", ""); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", "func (c *"+name+") Decode(src []byte) ([]byte, error) {"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "if len(src) < "+strconv.Itoa(totalBytes)+" {"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t\t", "return nil, io.ErrUnexpectedEOF"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "}"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "var raw uint64"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "for i := 0; i < "+strconv.Itoa(totalBytes)+"; i++ {"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t\t", "raw = (raw << 8) | uint64(src[i])"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "}"); err != nil {
+		return err
+	}
 	remaining = bitfieldTotalBits(expr)
 	for _, field := range expr.Fields {
 		remaining -= field.Size
-		writeFormat(out, "\t{\n\t\tvalue := (raw >> %d) & 0x%s\n", remaining, strconv.FormatUint(bitfieldMask(field.Size), 16))
-		if field.Signed {
-			writeFormat(out, "\t\tif value&(uint64(1)<<%d) != 0 {\n\t\t\tvalue |= ^uint64(0x%s)\n\t\t}\n", field.Size-1, strconv.FormatUint(bitfieldMask(field.Size), 16))
-			writeFormat(out, "\t\tc.%s = %s(int64(value))\n", field.Name, bitfieldGoType(field))
-		} else {
-			writeFormat(out, "\t\tc.%s = %s(value)\n", field.Name, bitfieldGoType(field))
+		mask := strconv.FormatUint(bitfieldMask(field.Size), 16)
+		if err := writeRawLine(out, "\t", "{"); err != nil {
+			return err
 		}
-		writeFormat(out, "\t}\n")
+		if err := writeRawLine(out, "\t\t", "value := (raw >> "+strconv.Itoa(remaining)+") & 0x"+mask); err != nil {
+			return err
+		}
+		if field.Signed {
+			if err := writeRawLine(out, "\t\t", "if value&(uint64(1)<<"+strconv.Itoa(field.Size-1)+") != 0 {"); err != nil {
+				return err
+			}
+			if err := writeRawLine(out, "\t\t\t", "value |= ^uint64(0x"+mask+")"); err != nil {
+				return err
+			}
+			if err := writeRawLine(out, "\t\t", "}"); err != nil {
+				return err
+			}
+			if err := writeRawLine(out, "\t\t", "c."+field.Name+" = "+bitfieldGoType(field)+"(int64(value))"); err != nil {
+				return err
+			}
+		} else {
+			if err := writeRawLine(out, "\t\t", "c."+field.Name+" = "+bitfieldGoType(field)+"(value)"); err != nil {
+				return err
+			}
+		}
+		if err := writeRawLine(out, "\t", "}"); err != nil {
+			return err
+		}
 	}
-	writeFormat(out, "\treturn src[%d:], nil\n}\n\n", totalBytes)
+	if err := writeRawLine(out, "\t", "return src["+strconv.Itoa(totalBytes)+":], nil"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", "}"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", ""); err != nil {
+		return err
+	}
 	g.addImports("io")
 	return nil
 }
@@ -602,25 +700,88 @@ func (g *Generator) emitBitflags(out *bytes.Buffer, name string, expr *schemair.
 	}
 	g.addMappingImports(mapping)
 
-	writeFormat(out, "type %s struct {\n", name)
-	writeFormat(out, "\t_Value %s\n", mapping.GoType)
-	for _, flag := range expr.Flags {
-		writeFormat(out, "\t%s bool\n", flag.Name)
+	if err := writeRawLine(out, "", "type "+name+" struct {"); err != nil {
+		return err
 	}
-	writeFormat(out, "}\n\n")
+	if err := writeRawLine(out, "\t", "_Value "+mapping.GoType); err != nil {
+		return err
+	}
+	for _, flag := range expr.Flags {
+		if err := writeRawLine(out, "\t", flag.Name+" bool"); err != nil {
+			return err
+		}
+	}
+	if err := writeRawLine(out, "", "}"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", ""); err != nil {
+		return err
+	}
 
-	writeFormat(out, "func (%s) Size() (int, error) {\n\treturn %s(%s(0))\n}\n\n", name, mapping.SizeFn, mapping.GoType)
-	writeFormat(out, "func (c %s) Append(dst []byte) ([]byte, error) {\n\tvar raw uint64\n", name)
-	for _, flag := range expr.Flags {
-		writeFormat(out, "\tif c.%s { raw |= 0x%x }\n", flag.Name, flag.Mask)
+	if err := writeRawLine(out, "", "func ("+name+") Size() (int, error) {"); err != nil {
+		return err
 	}
-	writeFormat(out, "\treturn %s(dst, %s(raw))\n}\n\n", mapping.AppendFn, mapping.GoType)
-	writeFormat(out, "func (c *%s) Decode(src []byte) ([]byte, error) {\n\tvar raw %s\n\tvar err error\n\tsrc, err = %s(src, &raw)\n\tif err != nil { return nil, err }\n", name, mapping.GoType, mapping.DecodeFn)
-	writeFormat(out, "\tc._Value = raw\n")
-	for _, flag := range expr.Flags {
-		writeFormat(out, "\tc.%s = (uint64(raw) & 0x%x) != 0\n", flag.Name, flag.Mask)
+	if err := writeRawLine(out, "\t", "return "+mapping.SizeFn+"("+mapping.GoType+"(0))"); err != nil {
+		return err
 	}
-	writeFormat(out, "\treturn src, nil\n}\n\n")
+	if err := writeRawLine(out, "", "}"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", ""); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", "func (c "+name+") Append(dst []byte) ([]byte, error) {"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "var raw uint64"); err != nil {
+		return err
+	}
+	for _, flag := range expr.Flags {
+		if err := writeRawLine(out, "\t", "if c."+flag.Name+" { raw |= 0x"+strconv.FormatUint(flag.Mask, 16)+" }"); err != nil {
+			return err
+		}
+	}
+	if err := writeRawLine(out, "\t", "return "+mapping.AppendFn+"(dst, "+mapping.GoType+"(raw))"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", "}"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", ""); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", "func (c *"+name+") Decode(src []byte) ([]byte, error) {"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "var raw "+mapping.GoType); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "var err error"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "src, err = "+mapping.DecodeFn+"(src, &raw)"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "if err != nil { return nil, err }"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "\t", "c._Value = raw"); err != nil {
+		return err
+	}
+	for _, flag := range expr.Flags {
+		if err := writeRawLine(out, "\t", "c."+flag.Name+" = (uint64(raw) & 0x"+strconv.FormatUint(flag.Mask, 16)+") != 0"); err != nil {
+			return err
+		}
+	}
+	if err := writeRawLine(out, "\t", "return src, nil"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", "}"); err != nil {
+		return err
+	}
+	if err := writeRawLine(out, "", ""); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -639,7 +800,7 @@ func (g *Generator) emitRegistryHolder(out *bytes.Buffer, name string, expr *sch
 	if err := g.writeDecodeExpr(&decodeBody, nil, nil, expr.OtherwiseType, "(*c."+expr.OtherwiseName+")", "\t\t", name+expr.OtherwiseName, "c", "", nil, "c"); err != nil {
 		return err
 	}
-	g.addImports("github.com/go-mc/packetizer/wire")
+	g.addImports(wireImportPath)
 	return executeTemplate(out, "registryHolder", templateData{
 		"Name":       name,
 		"BaseName":   expr.BaseName,
@@ -679,7 +840,7 @@ func (g *Generator) emitRegistryHolderSet(out *bytes.Buffer, name string, expr *
 	if err := g.writeDecodeExpr(&itemDecode, nil, nil, expr.OtherwiseType, "c."+expr.OtherwiseName+"[i]", "\t\t", name+expr.OtherwiseName+"Item", "c", "", nil, "c"); err != nil {
 		return err
 	}
-	g.addImports("github.com/go-mc/packetizer/wire")
+	g.addImports(wireImportPath)
 	return executeTemplate(out, "registryHolderSet", templateData{
 		"Name":           name,
 		"BaseName":       expr.BaseName,
@@ -710,7 +871,7 @@ func (g *Generator) emitEntityMetadataLoop(out *bytes.Buffer, name string, expr 
 	if err := g.writeDecodeExpr(&decodeBody, nil, nil, expr.Elem, "item", "\t\t", name+"Item", "c", "", nil, "c"); err != nil {
 		return err
 	}
-	g.addImports("github.com/go-mc/packetizer/wire", "io")
+	g.addImports(wireImportPath, "io")
 	return executeTemplate(out, "entityMetadataLoop", templateData{
 		"Name":           name,
 		"ElemType":       elemType,
@@ -994,10 +1155,10 @@ func (g *Generator) walkExpr(name string, expr schemair.Expr, visited map[string
 	case *schemair.Mapper:
 		return g.walkExpr("", v.Base, visited)
 	case *schemair.RegistryHolder:
-		g.addImports("github.com/go-mc/packetizer/wire")
+		g.addImports(wireImportPath)
 		return g.walkExpr("", v.OtherwiseType, visited)
 	case *schemair.RegistryHolderSet:
-		g.addImports("github.com/go-mc/packetizer/wire")
+		g.addImports(wireImportPath)
 		if err := g.walkExpr("", v.BaseType, visited); err != nil {
 			return err
 		}
@@ -1196,12 +1357,18 @@ func (g *Generator) writeSizeExpr(out *bytes.Buffer, container *schemair.Contain
 func (g *Generator) writeAppendExpr(out *bytes.Buffer, container *schemair.Container, parentContainer *schemair.Container, expr schemair.Expr, value string, indent string, ctx string, owner string, parentOwner string, rootContainer *schemair.Container, rootOwner string) error {
 	switch v := expr.(type) {
 	case *schemair.Option:
-		writeFormat(out, "%sdst, err = wire.AppendBool(dst, %s != nil)\n%sif err != nil { return nil, err }\n", indent, value, indent)
-		writeFormat(out, "%sif %s != nil {\n", indent, value)
+		if err := writeAppendCall(out, indent, "wire.AppendBool(dst, "+value+" != nil)"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if "+value+" != nil {"); err != nil {
+			return err
+		}
 		if err := g.writeAppendExpr(out, container, parentContainer, v.Inner, derefExpr(value), indent+"\t", ctx+"Value", owner, parentOwner, rootContainer, rootOwner); err != nil {
 			return err
 		}
-		writeFormat(out, "%s}\n", indent)
+		if err := writeRawLine(out, indent, "}"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Array:
 		countExpr, err := g.countAppendSnippet(v.Count, value, owner)
@@ -1209,18 +1376,26 @@ func (g *Generator) writeAppendExpr(out *bytes.Buffer, container *schemair.Conta
 			return err
 		}
 		if countExpr != "" {
-			writeFormat(out, "%s%s\n", indent, countExpr)
+			if err := writeRawLine(out, indent, countExpr); err != nil {
+				return err
+			}
 		}
-		writeFormat(out, "%sfor _, item := range %s {\n", indent, value)
+		if err := writeRawLine(out, indent, "for _, item := range "+value+" {"); err != nil {
+			return err
+		}
 		if err := g.writeAppendExpr(out, container, parentContainer, v.Elem, "item", indent+"\t", ctx+"Item", owner, parentOwner, rootContainer, rootOwner); err != nil {
 			return err
 		}
-		writeFormat(out, "%s}\n", indent)
+		if err := writeRawLine(out, indent, "}"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Ref:
 		if mapping, ok := g.natives[v.Name]; ok {
 			g.addMappingImports(mapping)
-			writeFormat(out, "%sdst, err = %s(dst, %s)\n%sif err != nil { return nil, err }\n", indent, mapping.AppendFn, value, indent)
+			if err := writeAppendCall(out, indent, mapping.AppendFn+"(dst, "+value+")"); err != nil {
+				return err
+			}
 			return nil
 		}
 		if def, ok := g.types[v.Name]; ok {
@@ -1234,7 +1409,9 @@ func (g *Generator) writeAppendExpr(out *bytes.Buffer, container *schemair.Conta
 					return err
 				}
 				mapping := g.natives[baseName]
-				writeFormat(out, "%sdst, err = %s(dst, %s(%s))\n%sif err != nil { return nil, err }\n", indent, mapping.AppendFn, mapping.GoType, value, indent)
+				if err := writeAppendCall(out, indent, mapping.AppendFn+"(dst, "+mapping.GoType+"("+value+"))"); err != nil {
+					return err
+				}
 				return nil
 			case *schemair.Container:
 				if exprHasExternalCompare(inner) {
@@ -1245,13 +1422,19 @@ func (g *Generator) writeAppendExpr(out *bytes.Buffer, container *schemair.Conta
 					}
 					return nil
 				}
-				writeFormat(out, "%sdst, err = %s.Append(dst)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+				if err := writeAppendCall(out, indent, value+".Append(dst)"); err != nil {
+					return err
+				}
 				return nil
 			case *schemair.Array, *schemair.RegistryHolder, *schemair.RegistryHolderSet, *schemair.EntityMetadataLoop, *schemair.TopBitSetTerminatedArray:
-				writeFormat(out, "%sdst, err = %s.Append(dst)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+				if err := writeAppendCall(out, indent, value+".Append(dst)"); err != nil {
+					return err
+				}
 				return nil
 			case *schemair.Bitfield:
-				writeFormat(out, "%sdst, err = %s.Append(dst)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+				if err := writeAppendCall(out, indent, value+".Append(dst)"); err != nil {
+					return err
+				}
 				return nil
 			default:
 				return g.writeAppendExpr(out, container, parentContainer, inner, value, indent, ctx, owner, parentOwner, rootContainer, rootOwner)
@@ -1264,7 +1447,9 @@ func (g *Generator) writeAppendExpr(out *bytes.Buffer, container *schemair.Conta
 			return fmt.Errorf("unsupported native %s", v.Name)
 		}
 		g.addMappingImports(mapping)
-		writeFormat(out, "%sdst, err = %s(dst, %s)\n%sif err != nil { return nil, err }\n", indent, mapping.AppendFn, value, indent)
+		if err := writeAppendCall(out, indent, mapping.AppendFn+"(dst, "+value+")"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Call:
 		switch v.Name {
@@ -1273,20 +1458,26 @@ func (g *Generator) writeAppendExpr(out *bytes.Buffer, container *schemair.Conta
 			if err != nil {
 				return err
 			}
-			writeFormat(out, "%sdst, err = %s(dst, %s)\n%sif err != nil { return nil, err }\n", indent, mapping.AppendFn, value, indent)
+			if err := writeAppendCall(out, indent, mapping.AppendFn+"(dst, "+value+")"); err != nil {
+				return err
+			}
 			return nil
 		case "Buffer":
 			return g.writeBufferAppend(out, v, value, indent, owner, ctx)
 		case "Cstring":
 			encoding := stringCallEncoding(v)
-			writeFormat(out, "%sdst, err = wire.AppendCString(dst, %s, %q)\n%sif err != nil { return nil, err }\n", indent, value, encoding, indent)
+			if err := writeAppendCall(out, indent, `wire.AppendCString(dst, `+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+				return err
+			}
 			return nil
 		case "Int":
 			size, err := intCallSize(v)
 			if err != nil {
 				return err
 			}
-			writeFormat(out, "%sdst, err = wire.AppendSizedUint(dst, %s, %d)\n%sif err != nil { return nil, err }\n", indent, value, size, indent)
+			if err := writeAppendCall(out, indent, "wire.AppendSizedUint(dst, "+value+", "+strconv.Itoa(size)+")"); err != nil {
+				return err
+			}
 			return nil
 		case "Pstring":
 			return g.writePstringAppend(out, v, value, indent, owner)
@@ -1298,10 +1489,14 @@ func (g *Generator) writeAppendExpr(out *bytes.Buffer, container *schemair.Conta
 	case *schemair.Container:
 		return g.writeContainerFieldsAppend(out, v, container, v.Fields, value, indent, ctx, owner, parentOwner, rootContainer, rootOwner)
 	case *schemair.Bitfield:
-		writeFormat(out, "%sdst, err = %s.Append(dst)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeAppendCall(out, indent, value+".Append(dst)"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Bitflags:
-		writeFormat(out, "%sdst, err = %s.Append(dst)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeAppendCall(out, indent, value+".Append(dst)"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Mapper:
 		baseName, err := g.nativeName(v.Base)
@@ -1309,10 +1504,14 @@ func (g *Generator) writeAppendExpr(out *bytes.Buffer, container *schemair.Conta
 			return err
 		}
 		mapping := g.natives[baseName]
-		writeFormat(out, "%sdst, err = %s(dst, %s(%s))\n%sif err != nil { return nil, err }\n", indent, mapping.AppendFn, mapping.GoType, value, indent)
+		if err := writeAppendCall(out, indent, mapping.AppendFn+"(dst, "+mapping.GoType+"("+value+"))"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.RegistryHolder, *schemair.RegistryHolderSet, *schemair.EntityMetadataLoop, *schemair.TopBitSetTerminatedArray:
-		writeFormat(out, "%sdst, err = %s.Append(dst)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeAppendCall(out, indent, value+".Append(dst)"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Switch:
 		return g.writeSwitchAppend(out, container, parentContainer, v, value, indent, ctx, owner, parentOwner, rootContainer, rootOwner)
@@ -1325,52 +1524,86 @@ func (g *Generator) writeDecodeExpr(out *bytes.Buffer, container *schemair.Conta
 	switch v := expr.(type) {
 	case *schemair.Option:
 		present := strcase.ToLowerCamel(ctx) + "Present"
-		writeFormat(out, "%svar %s bool\n", indent, present)
-		writeFormat(out, "%ssrc, err = wire.DecodeBool(src, &%s)\n%sif err != nil { return nil, err }\n", indent, present, indent)
-		writeFormat(out, "%sif %s {\n", indent, present)
+		if err := writeRawLine(out, indent, "var "+present+" bool"); err != nil {
+			return err
+		}
+		if err := writeDecodeCall(out, indent, "wire.DecodeBool(src, &"+present+")"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if "+present+" {"); err != nil {
+			return err
+		}
 		innerType, err := g.goType(ctx, v.Inner, ctx+"Value")
 		if err != nil {
 			return err
 		}
-		writeFormat(out, "%s\t%s = new(%s)\n", indent, value, innerType)
+		if err := writeRawLine(out, indent+"\t", value+" = new("+innerType+")"); err != nil {
+			return err
+		}
 		if err := g.writeDecodeExpr(out, container, parentContainer, v.Inner, derefExpr(value), indent+"\t", ctx+"Value", owner, parentOwner, rootContainer, rootOwner); err != nil {
 			return err
 		}
-		writeFormat(out, "%s} else {\n%s\t%s = nil\n%s}\n", indent, indent, value, indent)
+		if err := writeRawLine(out, indent, "} else {"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent+"\t", value+" = nil"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "}"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Array:
 		lengthVar := strcase.ToLowerCamel(ctx) + "Len"
 		switch {
 		case v.Count.Fixed != nil:
-			writeFormat(out, "%s%s := %d\n", indent, lengthVar, *v.Count.Fixed)
+			if err := writeRawLine(out, indent, lengthVar+" := "+strconv.Itoa(*v.Count.Fixed)); err != nil {
+				return err
+			}
 		case v.Count.Field != "":
-			writeFormat(out, "%s%s := int(%s)\n", indent, lengthVar, fieldPathExpr(owner, v.Count.Field))
+			if err := writeRawLine(out, indent, lengthVar+" := int("+fieldPathExpr(owner, v.Count.Field)+")"); err != nil {
+				return err
+			}
 		default:
 			nativeName := v.Count.Type
 			mapping, ok := g.natives[nativeName]
 			if !ok {
 				return fmt.Errorf("unsupported array count type %s", v.Count.Type)
 			}
-			writeFormat(out, "%svar %s %s\n", indent, lengthVar, mapping.GoType)
-			writeFormat(out, "%ssrc, err = %s(src, &%s)\n%sif err != nil { return nil, err }\n", indent, mapping.DecodeFn, lengthVar, indent)
-			writeFormat(out, "%s%sCount := int(%s)\n", indent, lengthVar, lengthVar)
+			if err := writeRawLine(out, indent, "var "+lengthVar+" "+mapping.GoType); err != nil {
+				return err
+			}
+			if err := writeDecodeCall(out, indent, mapping.DecodeFn+"(src, &"+lengthVar+")"); err != nil {
+				return err
+			}
+			if err := writeRawLine(out, indent, lengthVar+"Count := int("+lengthVar+")"); err != nil {
+				return err
+			}
 			lengthVar += "Count"
 		}
 		elemType, err := g.goType(ctx, v.Elem, ctx+"Item")
 		if err != nil {
 			return err
 		}
-		writeFormat(out, "%sif cap(%s) < %s { %s = make([]%s, %s) } else { %s = %s[:%s] }\n", indent, value, lengthVar, value, elemType, lengthVar, value, sliceExpr(value), lengthVar)
-		writeFormat(out, "%sfor i := range %s {\n", indent, value)
+		if err := writeRawLine(out, indent, "if cap("+value+") < "+lengthVar+" { "+value+" = make([]"+elemType+", "+lengthVar+") } else { "+value+" = "+sliceExpr(value)+"[:"+lengthVar+"] }"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "for i := range "+value+" {"); err != nil {
+			return err
+		}
 		if err := g.writeDecodeExpr(out, container, parentContainer, v.Elem, indexExpr(value, "i"), indent+"\t", ctx+"Item", owner, parentOwner, rootContainer, rootOwner); err != nil {
 			return err
 		}
-		writeFormat(out, "%s}\n", indent)
+		if err := writeRawLine(out, indent, "}"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Ref:
 		if mapping, ok := g.natives[v.Name]; ok {
 			g.addMappingImports(mapping)
-			writeFormat(out, "%ssrc, err = %s(src, &%s)\n%sif err != nil { return nil, err }\n", indent, mapping.DecodeFn, value, indent)
+			if err := writeDecodeCall(out, indent, mapping.DecodeFn+"(src, &"+value+")"); err != nil {
+				return err
+			}
 			return nil
 		}
 		if def, ok := g.types[v.Name]; ok {
@@ -1385,13 +1618,19 @@ func (g *Generator) writeDecodeExpr(out *bytes.Buffer, container *schemair.Conta
 				}
 				mapping := g.natives[baseName]
 				temp := strcase.ToLowerCamel(ctx) + "Value"
-				writeFormat(out, "%svar %s %s\n", indent, temp, mapping.GoType)
-				writeFormat(out, "%ssrc, err = %s(src, &%s)\n%sif err != nil { return nil, err }\n", indent, mapping.DecodeFn, temp, indent)
+				if err := writeRawLine(out, indent, "var "+temp+" "+mapping.GoType); err != nil {
+					return err
+				}
+				if err := writeDecodeCall(out, indent, mapping.DecodeFn+"(src, &"+temp+")"); err != nil {
+					return err
+				}
 				typeName := v.Name
 				if alias, ok := g.addExternalRef(v.Name); ok {
 					typeName = alias + "." + v.Name
 				}
-				writeFormat(out, "%s%s = %s(%s)\n", indent, value, typeName, temp)
+				if err := writeRawLine(out, indent, value+" = "+typeName+"("+temp+")"); err != nil {
+					return err
+				}
 				return nil
 			case *schemair.Container:
 				if exprHasExternalCompare(inner) {
@@ -1402,13 +1641,19 @@ func (g *Generator) writeDecodeExpr(out *bytes.Buffer, container *schemair.Conta
 					}
 					return nil
 				}
-				writeFormat(out, "%ssrc, err = %s.Decode(src)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+				if err := writeDecodeCall(out, indent, value+".Decode(src)"); err != nil {
+					return err
+				}
 				return nil
 			case *schemair.Array, *schemair.RegistryHolder, *schemair.RegistryHolderSet, *schemair.EntityMetadataLoop, *schemair.TopBitSetTerminatedArray:
-				writeFormat(out, "%ssrc, err = %s.Decode(src)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+				if err := writeDecodeCall(out, indent, value+".Decode(src)"); err != nil {
+					return err
+				}
 				return nil
 			case *schemair.Bitfield:
-				writeFormat(out, "%ssrc, err = %s.Decode(src)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+				if err := writeDecodeCall(out, indent, value+".Decode(src)"); err != nil {
+					return err
+				}
 				return nil
 			default:
 				return g.writeDecodeExpr(out, container, parentContainer, inner, value, indent, ctx, owner, parentOwner, rootContainer, rootOwner)
@@ -1421,7 +1666,9 @@ func (g *Generator) writeDecodeExpr(out *bytes.Buffer, container *schemair.Conta
 			return fmt.Errorf("unsupported native %s", v.Name)
 		}
 		g.addMappingImports(mapping)
-		writeFormat(out, "%ssrc, err = %s(src, &%s)\n%sif err != nil { return nil, err }\n", indent, mapping.DecodeFn, value, indent)
+		if err := writeDecodeCall(out, indent, mapping.DecodeFn+"(src, &"+value+")"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Call:
 		switch v.Name {
@@ -1430,20 +1677,26 @@ func (g *Generator) writeDecodeExpr(out *bytes.Buffer, container *schemair.Conta
 			if err != nil {
 				return err
 			}
-			writeFormat(out, "%ssrc, err = %s(src, &%s)\n%sif err != nil { return nil, err }\n", indent, mapping.DecodeFn, value, indent)
+			if err := writeDecodeCall(out, indent, mapping.DecodeFn+"(src, &"+value+")"); err != nil {
+				return err
+			}
 			return nil
 		case "Buffer":
 			return g.writeBufferDecode(out, v, value, indent, owner, ctx)
 		case "Cstring":
 			encoding := stringCallEncoding(v)
-			writeFormat(out, "%ssrc, err = wire.DecodeCString(src, &%s, %q)\n%sif err != nil { return nil, err }\n", indent, value, encoding, indent)
+			if err := writeDecodeCall(out, indent, `wire.DecodeCString(src, &`+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+				return err
+			}
 			return nil
 		case "Int":
 			size, err := intCallSize(v)
 			if err != nil {
 				return err
 			}
-			writeFormat(out, "%ssrc, err = wire.DecodeSizedUint(src, &%s, %d)\n%sif err != nil { return nil, err }\n", indent, value, size, indent)
+			if err := writeDecodeCall(out, indent, "wire.DecodeSizedUint(src, &"+value+", "+strconv.Itoa(size)+")"); err != nil {
+				return err
+			}
 			return nil
 		case "Pstring":
 			return g.writePstringDecode(out, v, value, indent, owner)
@@ -1455,10 +1708,14 @@ func (g *Generator) writeDecodeExpr(out *bytes.Buffer, container *schemair.Conta
 	case *schemair.Container:
 		return g.writeContainerFieldsDecode(out, v, container, v.Fields, value, indent, ctx, owner, parentOwner, rootContainer, rootOwner)
 	case *schemair.Bitfield:
-		writeFormat(out, "%ssrc, err = %s.Decode(src)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeDecodeCall(out, indent, value+".Decode(src)"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Bitflags:
-		writeFormat(out, "%ssrc, err = %s.Decode(src)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeDecodeCall(out, indent, value+".Decode(src)"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Mapper:
 		baseName, err := g.nativeName(v.Base)
@@ -1467,16 +1724,24 @@ func (g *Generator) writeDecodeExpr(out *bytes.Buffer, container *schemair.Conta
 		}
 		mapping := g.natives[baseName]
 		temp := strcase.ToLowerCamel(ctx) + "Value"
-		writeFormat(out, "%svar %s %s\n", indent, temp, mapping.GoType)
-		writeFormat(out, "%ssrc, err = %s(src, &%s)\n%sif err != nil { return nil, err }\n", indent, mapping.DecodeFn, temp, indent)
+		if err := writeRawLine(out, indent, "var "+temp+" "+mapping.GoType); err != nil {
+			return err
+		}
+		if err := writeDecodeCall(out, indent, mapping.DecodeFn+"(src, &"+temp+")"); err != nil {
+			return err
+		}
 		typeName := ctx
 		if alias, ok := g.addExternalRef(ctx); ok {
 			typeName = alias + "." + ctx
 		}
-		writeFormat(out, "%s%s = %s(%s)\n", indent, value, typeName, temp)
+		if err := writeRawLine(out, indent, value+" = "+typeName+"("+temp+")"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.RegistryHolder, *schemair.RegistryHolderSet, *schemair.EntityMetadataLoop, *schemair.TopBitSetTerminatedArray:
-		writeFormat(out, "%ssrc, err = %s.Decode(src)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeDecodeCall(out, indent, value+".Decode(src)"); err != nil {
+			return err
+		}
 		return nil
 	case *schemair.Switch:
 		return g.writeSwitchDecode(out, container, parentContainer, v, value, indent, ctx, owner, parentOwner, rootContainer, rootOwner)
@@ -1548,7 +1813,7 @@ func (g *Generator) addImportSpec(spec importSpec) {
 func (g *Generator) addMappingImports(mapping NativeMapping) {
 	g.addImports(mapping.Imports...)
 	if strings.Contains(mapping.GoType, "wire.") || strings.HasPrefix(mapping.SizeFn, "wire.") || strings.HasPrefix(mapping.AppendFn, "wire.") || strings.HasPrefix(mapping.DecodeFn, "wire.") {
-		g.addImports("github.com/go-mc/packetizer/wire")
+		g.addImports(wireImportPath)
 	}
 }
 

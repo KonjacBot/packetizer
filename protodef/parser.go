@@ -2,6 +2,7 @@ package protodef
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -16,6 +17,9 @@ type logicalLine struct {
 }
 
 func Parse(data []byte) (*Document, error) {
+	if isJSONObject(data) {
+		return parseProtocolJSON(data)
+	}
 	lines, err := lexLogicalLines(data)
 	if err != nil {
 		return nil, err
@@ -26,6 +30,63 @@ func Parse(data []byte) (*Document, error) {
 		return nil, err
 	}
 	return &Document{Entries: entries}, nil
+}
+
+func isJSONObject(data []byte) bool {
+	return len(bytes.TrimSpace(data)) > 0 && bytes.TrimSpace(data)[0] == '{'
+}
+
+func parseProtocolJSON(data []byte) (*Document, error) {
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, fmt.Errorf("parse json protocol: %w", err)
+	}
+
+	var entries []Entry
+	if types, ok := root["types"].(map[string]any); ok {
+		entries = append(entries, Entry{Key: "^types", Value: jsonTypesBlock(types)})
+	}
+	for state, rawState := range root {
+		if state == "types" {
+			continue
+		}
+		stateMap, ok := rawState.(map[string]any)
+		if !ok {
+			continue
+		}
+		for bound, rawBound := range stateMap {
+			boundMap, ok := rawBound.(map[string]any)
+			if !ok {
+				continue
+			}
+			types, ok := boundMap["types"].(map[string]any)
+			if !ok {
+				continue
+			}
+			entries = append(entries, Entry{
+				Key:   "^" + state + "." + bound + ".types",
+				Value: jsonTypesBlock(types),
+			})
+		}
+	}
+	return &Document{Entries: entries}, nil
+}
+
+func jsonTypesBlock(types map[string]any) *Block {
+	entries := make([]Entry, 0, len(types))
+	for key, raw := range types {
+		entries = append(entries, Entry{Key: key, Value: jsonValue(raw)})
+	}
+	return &Block{Entries: entries}
+}
+
+func jsonValue(raw any) Value {
+	switch v := raw.(type) {
+	case string:
+		return &Scalar{Text: v}
+	default:
+		return &Flow{Value: v}
+	}
 }
 
 func lexLogicalLines(data []byte) ([]logicalLine, error) {

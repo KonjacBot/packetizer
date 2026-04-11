@@ -3,6 +3,7 @@ package gogen
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/iancoleman/strcase"
@@ -89,20 +90,32 @@ func (g *Generator) writeBufferSize(out *bytes.Buffer, call *schemair.Call, valu
 	spec := callCountSpec(call)
 	switch {
 	case spec.Rest:
-		writeFormat(out, "%snn, err = wire.SizeRestBuffer(%s)\n%sn += nn\n%sif err != nil { return 0, err }\n", indent, value, indent, indent)
+		if err := writeSizeCall(out, indent, "wire.SizeRestBuffer("+value+")"); err != nil {
+			return err
+		}
 	case spec.Type != "":
 		mapping, ok := g.natives[spec.Type]
 		if !ok {
 			return fmt.Errorf("unsupported buffer count type %s", spec.Type)
 		}
-		writeFormat(out, "%snn, err = %s(%s(len(%s)))\n%sn += nn\n%sif err != nil { return 0, err }\n", indent, mapping.SizeFn, mapping.GoType, value, indent, indent)
-		writeFormat(out, "%snn, err = wire.SizeRawBytes(%s)\n%sn += nn\n%sif err != nil { return 0, err }\n", indent, value, indent, indent)
+		if err := writeSizeCall(out, indent, mapping.SizeFn+"("+mapping.GoType+"(len("+value+")))"); err != nil {
+			return err
+		}
+		if err := writeSizeCall(out, indent, "wire.SizeRawBytes("+value+")"); err != nil {
+			return err
+		}
 	case spec.Field != "":
-		writeFormat(out, "%snn, err = wire.SizeRawBytes(%s)\n%sn += nn\n%sif err != nil { return 0, err }\n", indent, value, indent, indent)
+		if err := writeSizeCall(out, indent, "wire.SizeRawBytes("+value+")"); err != nil {
+			return err
+		}
 	case spec.Fixed != nil:
 		g.addImports("fmt")
-		writeFormat(out, "%sif len(%s) != %d { return 0, fmt.Errorf(\"buffer length mismatch: expected %d, got %%d\", len(%s)) }\n", indent, value, *spec.Fixed, *spec.Fixed, value)
-		writeFormat(out, "%snn, err = wire.SizeRawBytes(%s)\n%sn += nn\n%sif err != nil { return 0, err }\n", indent, value, indent, indent)
+		if err := writeRawLine(out, indent, "if len("+value+") != "+strconv.Itoa(*spec.Fixed)+" { return 0, fmt.Errorf(\"buffer length mismatch: expected "+strconv.Itoa(*spec.Fixed)+", got %d\", len("+value+")) }"); err != nil {
+			return err
+		}
+		if err := writeSizeCall(out, indent, "wire.SizeRawBytes("+value+")"); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("buffer requires rest, count, or countType")
 	}
@@ -113,20 +126,32 @@ func (g *Generator) writeBufferAppend(out *bytes.Buffer, call *schemair.Call, va
 	spec := callCountSpec(call)
 	switch {
 	case spec.Rest:
-		writeFormat(out, "%sdst, err = wire.AppendRestBuffer(dst, %s)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeAppendCall(out, indent, "wire.AppendRestBuffer(dst, "+value+")"); err != nil {
+			return err
+		}
 	case spec.Type != "":
 		mapping, ok := g.natives[spec.Type]
 		if !ok {
 			return fmt.Errorf("unsupported buffer count type %s", spec.Type)
 		}
-		writeFormat(out, "%sdst, err = %s(dst, %s(len(%s)))\n%sif err != nil { return nil, err }\n", indent, mapping.AppendFn, mapping.GoType, value, indent)
-		writeFormat(out, "%sdst, err = wire.AppendRawBytes(dst, %s)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeAppendCall(out, indent, mapping.AppendFn+"(dst, "+mapping.GoType+"(len("+value+")))"); err != nil {
+			return err
+		}
+		if err := writeAppendCall(out, indent, "wire.AppendRawBytes(dst, "+value+")"); err != nil {
+			return err
+		}
 	case spec.Field != "":
-		writeFormat(out, "%sdst, err = wire.AppendRawBytes(dst, %s)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeAppendCall(out, indent, "wire.AppendRawBytes(dst, "+value+")"); err != nil {
+			return err
+		}
 	case spec.Fixed != nil:
 		g.addImports("fmt")
-		writeFormat(out, "%sif len(%s) != %d { return nil, fmt.Errorf(\"buffer length mismatch: expected %d, got %%d\", len(%s)) }\n", indent, value, *spec.Fixed, *spec.Fixed, value)
-		writeFormat(out, "%sdst, err = wire.AppendRawBytes(dst, %s)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeRawLine(out, indent, "if len("+value+") != "+strconv.Itoa(*spec.Fixed)+" { return nil, fmt.Errorf(\"buffer length mismatch: expected "+strconv.Itoa(*spec.Fixed)+", got %d\", len("+value+")) }"); err != nil {
+			return err
+		}
+		if err := writeAppendCall(out, indent, "wire.AppendRawBytes(dst, "+value+")"); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("buffer requires rest, count, or countType")
 	}
@@ -137,20 +162,32 @@ func (g *Generator) writeBufferDecode(out *bytes.Buffer, call *schemair.Call, va
 	spec := callCountSpec(call)
 	switch {
 	case spec.Rest:
-		writeFormat(out, "%ssrc, err = wire.DecodeRestBuffer(src, &%s)\n%sif err != nil { return nil, err }\n", indent, value, indent)
+		if err := writeDecodeCall(out, indent, "wire.DecodeRestBuffer(src, &"+value+")"); err != nil {
+			return err
+		}
 	case spec.Type != "":
 		mapping, ok := g.natives[spec.Type]
 		if !ok {
 			return fmt.Errorf("unsupported buffer count type %s", spec.Type)
 		}
 		countVar := strings.ReplaceAll(indent, "\t", "") + strcase.ToLowerCamel(ctx) + "BufferLen"
-		writeFormat(out, "%svar %s %s\n", indent, countVar, mapping.GoType)
-		writeFormat(out, "%ssrc, err = %s(src, &%s)\n%sif err != nil { return nil, err }\n", indent, mapping.DecodeFn, countVar, indent)
-		writeFormat(out, "%ssrc, err = wire.DecodeFixedBytes(src, &%s, int(%s))\n%sif err != nil { return nil, err }\n", indent, value, countVar, indent)
+		if err := writeRawLine(out, indent, "var "+countVar+" "+mapping.GoType); err != nil {
+			return err
+		}
+		if err := writeDecodeCall(out, indent, mapping.DecodeFn+"(src, &"+countVar+")"); err != nil {
+			return err
+		}
+		if err := writeDecodeCall(out, indent, "wire.DecodeFixedBytes(src, &"+value+", int("+countVar+"))"); err != nil {
+			return err
+		}
 	case spec.Field != "":
-		writeFormat(out, "%ssrc, err = wire.DecodeFixedBytes(src, &%s, int(%s))\n%sif err != nil { return nil, err }\n", indent, value, fieldPathExpr(owner, spec.Field), indent)
+		if err := writeDecodeCall(out, indent, "wire.DecodeFixedBytes(src, &"+value+", int("+fieldPathExpr(owner, spec.Field)+"))"); err != nil {
+			return err
+		}
 	case spec.Fixed != nil:
-		writeFormat(out, "%ssrc, err = wire.DecodeFixedBytes(src, &%s, %d)\n%sif err != nil { return nil, err }\n", indent, value, *spec.Fixed, indent)
+		if err := writeDecodeCall(out, indent, "wire.DecodeFixedBytes(src, &"+value+", "+strconv.Itoa(*spec.Fixed)+")"); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("buffer requires rest, count, or countType")
 	}
@@ -166,19 +203,46 @@ func (g *Generator) writePstringSize(out *bytes.Buffer, call *schemair.Call, val
 		if !ok {
 			return fmt.Errorf("unsupported pstring count type %s", spec.Type)
 		}
-		writeFormat(out, "%sstringLen, err := wire.SizeStringEncoded(%s, %q)\n%sif err != nil { return 0, err }\n", indent, value, encoding, indent)
-		writeFormat(out, "%snn, err = %s(%s(stringLen))\n%sn += nn\n%sif err != nil { return 0, err }\n", indent, mapping.SizeFn, mapping.GoType, indent, indent)
-		writeFormat(out, "%sn += stringLen\n", indent)
+		if err := writeRawLine(out, indent, `stringLen, err := wire.SizeStringEncoded(`+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if err != nil { return 0, err }"); err != nil {
+			return err
+		}
+		if err := writeSizeCall(out, indent, mapping.SizeFn+"("+mapping.GoType+"(stringLen))"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "n += stringLen"); err != nil {
+			return err
+		}
 	case spec.Field != "":
 		g.addImports("fmt")
-		writeFormat(out, "%sstringLen, err := wire.SizeStringEncoded(%s, %q)\n%sif err != nil { return 0, err }\n", indent, value, encoding, indent)
-		writeFormat(out, "%sif stringLen != int(%s) { return 0, fmt.Errorf(\"string length mismatch: expected %%d, got %%d\", int(%s), stringLen) }\n", indent, fieldPathExpr(owner, spec.Field), fieldPathExpr(owner, spec.Field))
-		writeFormat(out, "%sn += stringLen\n", indent)
+		if err := writeRawLine(out, indent, `stringLen, err := wire.SizeStringEncoded(`+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if err != nil { return 0, err }"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if stringLen != int("+fieldPathExpr(owner, spec.Field)+`) { return 0, fmt.Errorf("string length mismatch: expected %d, got %d", int(`+fieldPathExpr(owner, spec.Field)+`), stringLen) }`); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "n += stringLen"); err != nil {
+			return err
+		}
 	case spec.Fixed != nil:
 		g.addImports("fmt")
-		writeFormat(out, "%sstringLen, err := wire.SizeStringEncoded(%s, %q)\n%sif err != nil { return 0, err }\n", indent, value, encoding, indent)
-		writeFormat(out, "%sif stringLen != %d { return 0, fmt.Errorf(\"string length mismatch: expected %d, got %%d\", stringLen) }\n", indent, *spec.Fixed, *spec.Fixed)
-		writeFormat(out, "%sn += stringLen\n", indent)
+		if err := writeRawLine(out, indent, `stringLen, err := wire.SizeStringEncoded(`+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if err != nil { return 0, err }"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if stringLen != "+strconv.Itoa(*spec.Fixed)+` { return 0, fmt.Errorf("string length mismatch: expected `+strconv.Itoa(*spec.Fixed)+`, got %d", stringLen) }`); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "n += stringLen"); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("pstring requires count or countType")
 	}
@@ -194,19 +258,46 @@ func (g *Generator) writePstringAppend(out *bytes.Buffer, call *schemair.Call, v
 		if !ok {
 			return fmt.Errorf("unsupported pstring count type %s", spec.Type)
 		}
-		writeFormat(out, "%sstringLen, err := wire.SizeStringEncoded(%s, %q)\n%sif err != nil { return nil, err }\n", indent, value, encoding, indent)
-		writeFormat(out, "%sdst, err = %s(dst, %s(stringLen))\n%sif err != nil { return nil, err }\n", indent, mapping.AppendFn, mapping.GoType, indent)
-		writeFormat(out, "%sdst, err = wire.AppendStringEncoded(dst, %s, %q)\n%sif err != nil { return nil, err }\n", indent, value, encoding, indent)
+		if err := writeRawLine(out, indent, `stringLen, err := wire.SizeStringEncoded(`+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if err != nil { return nil, err }"); err != nil {
+			return err
+		}
+		if err := writeAppendCall(out, indent, mapping.AppendFn+"(dst, "+mapping.GoType+"(stringLen))"); err != nil {
+			return err
+		}
+		if err := writeAppendCall(out, indent, `wire.AppendStringEncoded(dst, `+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
 	case spec.Field != "":
 		g.addImports("fmt")
-		writeFormat(out, "%sstringLen, err := wire.SizeStringEncoded(%s, %q)\n%sif err != nil { return nil, err }\n", indent, value, encoding, indent)
-		writeFormat(out, "%sif stringLen != int(%s) { return nil, fmt.Errorf(\"string length mismatch: expected %%d, got %%d\", int(%s), stringLen) }\n", indent, fieldPathExpr(owner, spec.Field), fieldPathExpr(owner, spec.Field))
-		writeFormat(out, "%sdst, err = wire.AppendStringEncoded(dst, %s, %q)\n%sif err != nil { return nil, err }\n", indent, value, encoding, indent)
+		if err := writeRawLine(out, indent, `stringLen, err := wire.SizeStringEncoded(`+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if err != nil { return nil, err }"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if stringLen != int("+fieldPathExpr(owner, spec.Field)+`) { return nil, fmt.Errorf("string length mismatch: expected %d, got %d", int(`+fieldPathExpr(owner, spec.Field)+`), stringLen) }`); err != nil {
+			return err
+		}
+		if err := writeAppendCall(out, indent, `wire.AppendStringEncoded(dst, `+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
 	case spec.Fixed != nil:
 		g.addImports("fmt")
-		writeFormat(out, "%sstringLen, err := wire.SizeStringEncoded(%s, %q)\n%sif err != nil { return nil, err }\n", indent, value, encoding, indent)
-		writeFormat(out, "%sif stringLen != %d { return nil, fmt.Errorf(\"string length mismatch: expected %d, got %%d\", stringLen) }\n", indent, *spec.Fixed, *spec.Fixed)
-		writeFormat(out, "%sdst, err = wire.AppendStringEncoded(dst, %s, %q)\n%sif err != nil { return nil, err }\n", indent, value, encoding, indent)
+		if err := writeRawLine(out, indent, `stringLen, err := wire.SizeStringEncoded(`+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if err != nil { return nil, err }"); err != nil {
+			return err
+		}
+		if err := writeRawLine(out, indent, "if stringLen != "+strconv.Itoa(*spec.Fixed)+` { return nil, fmt.Errorf("string length mismatch: expected `+strconv.Itoa(*spec.Fixed)+`, got %d", stringLen) }`); err != nil {
+			return err
+		}
+		if err := writeAppendCall(out, indent, `wire.AppendStringEncoded(dst, `+value+`, `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("pstring requires count or countType")
 	}
@@ -223,13 +314,23 @@ func (g *Generator) writePstringDecode(out *bytes.Buffer, call *schemair.Call, v
 			return fmt.Errorf("unsupported pstring count type %s", spec.Type)
 		}
 		countVar := strcase.ToLowerCamel(owner) + "StringLen"
-		writeFormat(out, "%svar %s %s\n", indent, countVar, mapping.GoType)
-		writeFormat(out, "%ssrc, err = %s(src, &%s)\n%sif err != nil { return nil, err }\n", indent, mapping.DecodeFn, countVar, indent)
-		writeFormat(out, "%ssrc, err = wire.DecodeFixedString(src, &%s, int(%s), %q)\n%sif err != nil { return nil, err }\n", indent, value, countVar, encoding, indent)
+		if err := writeRawLine(out, indent, "var "+countVar+" "+mapping.GoType); err != nil {
+			return err
+		}
+		if err := writeDecodeCall(out, indent, mapping.DecodeFn+"(src, &"+countVar+")"); err != nil {
+			return err
+		}
+		if err := writeDecodeCall(out, indent, `wire.DecodeFixedString(src, &`+value+`, int(`+countVar+`), `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
 	case spec.Field != "":
-		writeFormat(out, "%ssrc, err = wire.DecodeFixedString(src, &%s, int(%s), %q)\n%sif err != nil { return nil, err }\n", indent, value, fieldPathExpr(owner, spec.Field), encoding, indent)
+		if err := writeDecodeCall(out, indent, `wire.DecodeFixedString(src, &`+value+`, int(`+fieldPathExpr(owner, spec.Field)+`), `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
 	case spec.Fixed != nil:
-		writeFormat(out, "%ssrc, err = wire.DecodeFixedString(src, &%s, %d, %q)\n%sif err != nil { return nil, err }\n", indent, value, *spec.Fixed, encoding, indent)
+		if err := writeDecodeCall(out, indent, `wire.DecodeFixedString(src, &`+value+`, `+strconv.Itoa(*spec.Fixed)+`, `+strconv.Quote(encoding)+`)`); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("pstring requires count or countType")
 	}

@@ -53,7 +53,7 @@ func compileProtoFile(t *testing.T, protoPath string, packageName string, types 
 	if err := os.WriteFile(filepath.Join(tmp, "proto_gen.go"), code, 0644); err != nil {
 		t.Fatal(err)
 	}
-	mod := "module proto_compile_test\n\ngo 1.24\n\nrequire github.com/go-mc/packetizer v0.0.0\n\nreplace github.com/go-mc/packetizer => " + repoRoot
+	mod := "module proto_compile_test\n\ngo 1.24\n\nrequire github.com/KonjacBot/packetizer v0.0.0\n\nreplace github.com/KonjacBot/packetizer => " + repoRoot
 	if err := os.WriteFile(filepath.Join(tmp, "go.mod"), []byte(mod), 0644); err != nil {
 		t.Fatal(err)
 	}

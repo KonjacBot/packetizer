@@ -352,6 +352,9 @@ func lowerFlow(raw any) (schemair.Expr, error) {
 				}
 				name, _ := m["name"].(string)
 				anon, _ := m["anon"].(bool)
+				if anon && name == "" {
+					name = "_"
+				}
 				fields = append(fields, schemair.Field{
 					Name:      sanitizeFieldName(name),
 					Anonymous: anon,
