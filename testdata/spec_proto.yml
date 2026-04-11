@@ -1,0 +1,57 @@
+!version: 1
+^types:
+   varint: native
+   varint64: native
+   varint128: native
+   zigzag32: native
+   u8: native
+   bool: native
+   li32: native
+   CText: ["cstring", { "encoding": "utf-16le" }]
+   FixedBlob: ["buffer", { "count": 4 }]
+   FixedInt24: ["int", { "size": 3 }]
+   StaticChoice: ["switch", {
+      "compareToValue": 2,
+      "fields": {
+         "2": "u8"
+      },
+      "default": "void"
+   }]
+   AnonInline: ["container", [
+      { "name": "lead", "type": "varint" },
+      { "anon": true, "type": ["container", [
+         { "name": "x", "type": "u8" },
+         { "name": "y", "type": "bool" }
+      ]] }
+   ]]
+   ShiftFlags: ["bitflags", {
+      "type": "u8",
+      "shift": true,
+      "flags": {
+         "alpha": 0,
+         "gamma": 2
+      }
+   }]
+   MaskFlags: ["bitflags", {
+      "type": "u8",
+      "flags": {
+         "left": 1,
+         "right": 8
+      }
+   }]
+   NameLen: ["count", { "type": "varint", "countFor": "name" }]
+   SpecPacket:
+      nameLen: ["count", { "type": "varint", "countFor": "name" }]
+      name: ["pstring", { "count": "nameLen", "encoding": "utf-8" }]
+      title: CText
+      flags: ShiftFlags
+      mask: MaskFlags
+      little: li32
+      signed: zigzag32
+      longish: varint64
+      huge: varint128
+      fixedInt: FixedInt24
+      staticChoice: StaticChoice
+      inline: AnonInline
+      fixed: FixedBlob
+      tail: ["buffer", { "rest": true }]

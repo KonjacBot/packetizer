@@ -1,0 +1,30 @@
+{{define "sizeCall"}}{{.Indent}}nn, err = {{.Call}}
+{{.Indent}}n += nn
+{{.Indent}}if err != nil { return 0, err }
+{{end}}
+
+{{define "appendCall"}}{{.Indent}}dst, err = {{.Call}}
+{{.Indent}}if err != nil { return nil, err }
+{{end}}
+
+{{define "decodeCall"}}{{.Indent}}src, err = {{.Call}}
+{{.Indent}}if err != nil { return nil, err }
+{{end}}
+
+{{define "sizeOptionStart"}}{{.Indent}}nn, err = wire.SizeBool({{.Value}} != nil)
+{{.Indent}}n += nn
+{{.Indent}}if err != nil { return 0, err }
+{{.Indent}}if {{.Value}} != nil {
+{{end}}
+
+{{define "blockEnd"}}{{.Indent}}}
+{{end}}
+
+{{define "rawLine"}}{{.Indent}}{{.Code}}
+{{end}}
+
+{{define "rangeStart"}}{{.Indent}}for _, item := range {{.Value}} {
+{{end}}
+
+{{define "formatf"}}{{sprintfv .Format .Args}}{{end}}
+

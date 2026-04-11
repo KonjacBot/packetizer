@@ -1,0 +1,41 @@
+{{define "enum"}}type {{.Name}} {{.BaseType}}
+
+const (
+{{- range .Entries}}
+	{{$.Name}}{{.Name}} {{$.Name}} = {{.Key}}
+{{- end}}
+)
+
+func (c {{.Name}}) Size() (int, error) {
+	return {{.SizeFn}}({{.BaseType}}(c))
+}
+
+func (c {{.Name}}) Append(dst []byte) ([]byte, error) {
+	return {{.AppendFn}}(dst, {{.BaseType}}(c))
+}
+
+func (c *{{.Name}}) Decode(src []byte) ([]byte, error) {
+	var value {{.BaseType}}
+	var err error
+	src, err = {{.DecodeFn}}(src, &value)
+	if err != nil { return nil, err }
+	*c = {{.Name}}(value)
+	return src, nil
+}
+
+{{end}}
+
+{{define "struct"}}type {{.Name}} struct {
+{{.Fields -}}
+}
+
+{{end}}
+
+{{define "arrayType"}}type {{.Name}} []{{.ElemType}}
+
+{{end}}
+
+{{define "aliasType"}}type {{.Name}} {{.GoType}}
+
+{{end}}
+

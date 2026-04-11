@@ -1,0 +1,187 @@
+{{define "registryHolder"}}type {{.Name}} struct {
+	{{.BaseName}} int32
+	{{.DataName}} *{{.DataType}}
+}
+
+func (c {{.Name}}) Size() (int, error) {
+	var n, nn int
+	var err error
+	nn, err = wire.SizeVarInt(c.{{.BaseName}})
+	n += nn
+	if err != nil { return 0, err }
+	if c.{{.BaseName}} == 0 && c.{{.DataName}} != nil {
+{{.SizeBody -}}
+	}
+	_ = nn
+	return n, err
+}
+
+func (c {{.Name}}) Append(dst []byte) ([]byte, error) {
+	var err error
+	dst, err = wire.AppendVarInt(dst, c.{{.BaseName}})
+	if err != nil { return nil, err }
+	if c.{{.BaseName}} == 0 && c.{{.DataName}} != nil {
+{{.AppendBody -}}
+	}
+	return dst, nil
+}
+
+func (c *{{.Name}}) Decode(src []byte) ([]byte, error) {
+	var err error
+	src, err = wire.DecodeVarInt(src, &c.{{.BaseName}})
+	if err != nil { return nil, err }
+	if c.{{.BaseName}} == 0 {
+		c.{{.DataName}} = new({{.DataType}})
+{{.DecodeBody -}}
+	} else {
+		c.{{.DataName}} = nil
+	}
+	return src, nil
+}
+
+{{end}}
+
+{{define "registryHolderSet"}}type {{.Name}} struct {
+	{{.BaseName}} *{{.BaseType}}
+	{{.DataName}} []{{.DataType}}
+}
+
+func (c {{.Name}}) Size() (int, error) {
+	var n, nn int
+	var err error
+	if c.{{.BaseName}} != nil {
+		nn, err = wire.SizeVarInt(0)
+		n += nn
+		if err != nil { return 0, err }
+{{.BaseSizeBody -}}
+	} else {
+		nn, err = wire.SizeVarInt(int32(len(c.{{.DataName}})))
+		n += nn
+		if err != nil { return 0, err }
+		for _, item := range c.{{.DataName}} {
+{{.ItemSizeBody -}}
+		}
+	}
+	_ = nn
+	return n, err
+}
+
+func (c {{.Name}}) Append(dst []byte) ([]byte, error) {
+	var err error
+	if c.{{.BaseName}} != nil {
+		dst, err = wire.AppendVarInt(dst, 0)
+		if err != nil { return nil, err }
+{{.BaseAppendBody -}}
+	} else {
+		dst, err = wire.AppendVarInt(dst, int32(len(c.{{.DataName}})))
+		if err != nil { return nil, err }
+		for _, item := range c.{{.DataName}} {
+{{.ItemAppendBody -}}
+		}
+	}
+	return dst, nil
+}
+
+func (c *{{.Name}}) Decode(src []byte) ([]byte, error) {
+	var err error
+	var count int32
+	src, err = wire.DecodeVarInt(src, &count)
+	if err != nil { return nil, err }
+	if count == 0 {
+		c.{{.BaseName}} = new({{.BaseType}})
+{{.BaseDecodeBody -}}
+		c.{{.DataName}} = nil
+		return src, nil
+	}
+	c.{{.BaseName}} = nil
+	if cap(c.{{.DataName}}) < int(count) {
+		c.{{.DataName}} = make([]{{.DataType}}, int(count))
+	} else {
+		c.{{.DataName}} = c.{{.DataName}}[:int(count)]
+	}
+	for i := range c.{{.DataName}} {
+{{.ItemDecodeBody -}}
+	}
+	return src, nil
+}
+
+{{end}}
+
+{{define "entityMetadataLoop"}}type {{.Name}} []{{.ElemType}}
+
+func (c {{.Name}}) Size() (int, error) {
+	var n, nn int
+	var err error
+	for _, item := range c {
+{{.ItemSizeBody -}}
+	}
+	nn, err = wire.SizeUint8(uint8({{.EndVal}}))
+	n += nn
+	if err != nil { return 0, err }
+	_ = nn
+	return n, err
+}
+
+func (c {{.Name}}) Append(dst []byte) ([]byte, error) {
+	var err error
+	for _, item := range c {
+{{.ItemAppendBody -}}
+	}
+	dst, err = wire.AppendUint8(dst, uint8({{.EndVal}}))
+	if err != nil { return nil, err }
+	return dst, nil
+}
+
+func (c *{{.Name}}) Decode(src []byte) ([]byte, error) {
+	var err error
+	*c = (*c)[:0]
+	for {
+		if len(src) < 1 { return nil, io.ErrUnexpectedEOF }
+		if src[0] == byte({{.EndVal}}) { return src[1:], nil }
+		var item {{.ElemType}}
+{{.ItemDecodeBody -}}
+		*c = append(*c, item)
+	}
+}
+
+{{end}}
+
+{{define "topBitSetTerminatedArray"}}type {{.Name}} []{{.ElemType}}
+
+func (c {{.Name}}) Size() (int, error) {
+	var n, nn int
+	var err error
+	for _, item := range c {
+{{.ItemSizeBody -}}
+	}
+	_ = nn
+	return n, err
+}
+
+func (c {{.Name}}) Append(dst []byte) ([]byte, error) {
+	var err error
+	for i, item := range c {
+		before := len(dst)
+{{.ItemAppendBody -}}
+		if before == len(dst) { return nil, io.ErrShortWrite }
+		if i < len(c)-1 { dst[before] |= 0x80 }
+	}
+	return dst, nil
+}
+
+func (c *{{.Name}}) Decode(src []byte) ([]byte, error) {
+	var err error
+	*c = (*c)[:0]
+	for {
+		if len(src) < 1 { return nil, io.ErrUnexpectedEOF }
+		last := src[0]&0x80 == 0
+		if !last { src[0] &^= 0x80 }
+		var item {{.ElemType}}
+{{.ItemDecodeBody -}}
+		*c = append(*c, item)
+		if last { return src, nil }
+	}
+}
+
+{{end}}
+

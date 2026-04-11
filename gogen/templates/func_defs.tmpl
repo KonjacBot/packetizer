@@ -1,0 +1,38 @@
+{{define "sizeFunc"}}func (c {{.Name}}) Size() (int, error) {
+	var n, nn int
+	var err error
+{{.Body -}}
+	_ = nn
+	return n, err
+}
+
+{{end}}
+
+{{define "appendFunc"}}func (c {{.Name}}) Append(dst []byte) ([]byte, error) {
+	var err error
+{{.Body -}}
+	return dst, nil
+}
+
+{{end}}
+
+{{define "decodeFunc"}}func (c *{{.Name}}) Decode(src []byte) ([]byte, error) {
+	var err error
+{{.Body -}}
+	return src, nil
+}
+
+{{end}}
+
+{{define "emptyAppendFunc"}}func (c {{.Name}}) Append(dst []byte) ([]byte, error) {
+	return dst, nil
+}
+
+{{end}}
+
+{{define "emptyDecodeFunc"}}func (c *{{.Name}}) Decode(src []byte) ([]byte, error) {
+	return src, nil
+}
+
+{{end}}
+

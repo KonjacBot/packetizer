@@ -1,0 +1,20 @@
+!version: 1
+^types:
+   varint: native
+   pstring: native
+   bool: native
+   anonymousNbt: native
+   ByteArray: ["buffer", { "countType": "varint" }]
+   string: ["pstring", { "countType": "varint" }]
+   Mode: varint =>
+      - idle
+      - active
+   ItemData:
+      name: string
+      payload?: anonymousNbt
+   ExamplePacket:
+      enabled: bool
+      mode: Mode
+      item: ItemData
+      items: ItemData[]varint
+      raw: ByteArray

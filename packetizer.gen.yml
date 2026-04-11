@@ -1,0 +1,6 @@
+sources:
+  - https://github.com/reallyoldfogie/minecraft-data/raw/5bb2061a57d3391104265fb123cb06344f804cf0/data/pc/latest/proto.yml
+  # - ./proto/proto.yml # local
+target:
+  base_directory: ./generated
+  base_package: generated
